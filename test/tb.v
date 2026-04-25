@@ -1,49 +1,39 @@
-`default_nettype none
-`timescale 1ns / 1ps
+import cocotb
+from cocotb.triggers import Timer
 
-/* This testbench just instantiates the module and makes some convenient wires
-   that can be driven / tested by the cocotb test.py.
-*/
-module tb ();
 
-  // Dump the signals to a FST file. You can view it with gtkwave or surfer.
-  initial begin
-    $dumpfile("tb.fst");
-    $dumpvars(0, tb);
-    #1;
-  end
+@cocotb.test()
+async def test_alu(dut):
+    dut._log.info("Starting ALU Test")
 
-  // Wire up the inputs and outputs:
-  reg clk;
-  reg rst_n;
-  reg ena;
-  reg [7:0] ui_in;
-  reg [7:0] uio_in;
-  wire [7:0] uo_out;
-  wire [7:0] uio_out;
-  wire [7:0] uio_oe;
-`ifdef GL_TEST
-  wire VPWR = 1'b1;
-  wire VGND = 1'b0;
-`endif
+    # reset / init
+    dut.ena.value = 1
+    dut.ui_in.value = 0
+    dut.uio_in.value = 0
+    dut.rst_n.value = 0
 
-  // Replace tt_um_example with your module name:
-  tt_um_example user_project (
+    await Timer(50, unit="ns")
+    dut.rst_n.value = 1
+    await Timer(50, unit="ns")
 
-      // Include power ports for the Gate Level test:
-`ifdef GL_TEST
-      .VPWR(VPWR),
-      .VGND(VGND),
-`endif
+    test_cases = [
+        # (a, b, op, expected)
+        (3, 2, 0, 5),   # ADD
+        (3, 2, 1, 1),   # SUB
+        (3, 2, 2, 2),   # AND
+        (3, 2, 3, 3),   # OR
+    ]
 
-      .ui_in  (ui_in),    // Dedicated inputs
-      .uo_out (uo_out),   // Dedicated outputs
-      .uio_in (uio_in),   // IOs: Input path
-      .uio_out(uio_out),  // IOs: Output path
-      .uio_oe (uio_oe),   // IOs: Enable path (active high: 0=input, 1=output)
-      .ena    (ena),      // enable - goes high when design is selected
-      .clk    (clk),      // clock
-      .rst_n  (rst_n)     // not reset
-  );
+    for a, b, op, expected in test_cases:
 
-endmodule
+        # pack inputs
+        dut.ui_in.value = (b << 4) | a
+        dut.uio_in.value = op
+
+        await Timer(20, unit="ns")
+
+        result = int(dut.uo_out.value)
+
+        assert result == expected, f"FAIL: a={a} b={b} op={op} got={result}"
+
+        dut._log.info(f"PASS: a={a}, b={b}, op={op} → {result}")

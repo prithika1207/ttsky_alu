@@ -1,40 +1,39 @@
-# SPDX-FileCopyrightText: © 2024 Tiny Tapeout
-# SPDX-License-Identifier: Apache-2.0
-
 import cocotb
-from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles
+from cocotb.triggers import Timer
 
 
 @cocotb.test()
-async def test_project(dut):
-    dut._log.info("Start")
+async def test_alu(dut):
+    dut._log.info("Starting ALU Test")
 
-    # Set the clock period to 10 us (100 KHz)
-    clock = Clock(dut.clk, 10, unit="us")
-    cocotb.start_soon(clock.start())
-
-    # Reset
-    dut._log.info("Reset")
+    # init / reset
     dut.ena.value = 1
     dut.ui_in.value = 0
     dut.uio_in.value = 0
     dut.rst_n.value = 0
-    await ClockCycles(dut.clk, 10)
+
+    await Timer(50, unit="ns")
     dut.rst_n.value = 1
+    await Timer(50, unit="ns")
 
-    dut._log.info("Test project behavior")
+    # (A, B, op, expected output)
+    test_cases = [
+        (3, 2, 0, 5),  # ADD
+        (3, 2, 1, 1),  # SUB
+        (3, 2, 2, 2),  # AND
+        (3, 2, 3, 3),  # OR
+    ]
 
-    # Set the input values you want to test
-    dut.ui_in.value = 20
-    dut.uio_in.value = 30
+    for a, b, op, expected in test_cases:
 
-    # Wait for one clock cycle to see the output values
-    await ClockCycles(dut.clk, 1)
+        # pack inputs (A in lower 4 bits, B in upper 4 bits)
+        dut.ui_in.value = (b << 4) | a
+        dut.uio_in.value = op
 
-    # The following assersion is just an example of how to check the output values.
-    # Change it to match the actual expected output of your module:
-    assert dut.uo_out.value == 50
+        await Timer(20, unit="ns")
 
-    # Keep testing the module by changing the input values, waiting for
-    # one or more clock cycles, and asserting the expected output values.
+        result = int(dut.uo_out.value)
+
+        assert result == expected, f"FAIL: a={a} b={b} op={op} got={result}"
+
+        dut._log.info(f"PASS: A={a}, B={b}, OP={op} → {result}")
